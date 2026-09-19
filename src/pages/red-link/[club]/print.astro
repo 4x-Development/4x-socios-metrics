@@ -1,0 +1,238 @@
+---
+import PrintLayout from '@layouts/PrintLayout.astro';
+import { clubs, getClub, loadRedLinkSummary } from '@db';
+import { formatCurrency, formatNumber, formatPercent, formatYearMonth } from '@lib/format';
+
+/**
+ * Printable / PDF view for Red Link inbound collections.
+ *
+ * Pure tables — no charts. Reuses the same `loadRedLinkSummary` from the
+ * facade, so the data is identical to what shows on /red-link/[club].
+ * The page title is set so "Save as PDF" in the browser suggests a useful
+ * filename like "Red Link - Club Independiente Dolores.pdf".
+ */
+
+export async function getStaticPaths() {
+  return clubs.map((c) => ({ params: { club: c.id } }));
+}
+
+const { club: clubId } = Astro.params;
+const club = getClub(clubId!);
+if (!club) {
+  return Astro.redirect('/red-link');
+}
+
+const { data: redLink } = await loadRedLinkSummary(club.id, 6);
+// Nothing to print without data: send the reader back to the club page,
+// which explains why the data is missing.
+if (!redLink) {
+  return Astro.redirect(`/red-link/${club.id}`);
+}
+
+const today = new Date().toLocaleDateString('es-AR', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
+
+const periodLabel =
+  redLink.fromYearMonth && redLink.toYearMonth
+    ? `${formatYearMonth(redLink.fromYearMonth, { withYear: true })} → ${formatYearMonth(redLink.toYearMonth, { withYear: true })}`
+    : 'Sin datos en el período';
+
+const weekdayLabels = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const pageTitle = `Red Link - ${club.name}`;
+---
+
+<PrintLayout title={pageTitle}>
+  <!-- Document header -->
+  <header class="border-b-2 border-ink-300 pb-4">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-navy-700">
+          4x · Dashboard de Métricas
+        </p>
+        <h1 class="mt-1 text-2xl font-extrabold tracking-tight text-ink-900">
+          Cobros recibidos por Red Link
+        </h1>
+      </div>
+      <p class="whitespace-nowrap text-[11px] text-ink-500">Generado el {today}</p>
+    </div>
+
+    <dl class="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+      <div class="flex gap-2">
+        <dt class="font-medium text-ink-500">Club:</dt>
+        <dd class="font-semibold text-ink-900">{club.name}</dd>
+      </div>
+      <div class="flex gap-2">
+        <dt class="font-medium text-ink-500">Ciudad:</dt>
+        <dd class="text-ink-900">{club.city}</dd>
+      </div>
+      <div class="flex gap-2">
+        <dt class="font-medium text-ink-500">Período:</dt>
+        <dd class="text-ink-900">{periodLabel} ({redLink.monthsBack} meses)</dd>
+      </div>
+      <div class="flex gap-2">
+        <dt class="font-medium text-ink-500">Fuente:</dt>
+        <dd class="text-ink-900">
+          DB del club (datos en vivo)
+        </dd>
+      </div>
+    </dl>
+  </header>
+
+  <!-- Resumen del período -->
+  <section class="mt-7 print:break-inside-avoid">
+    <h2 class="text-base font-bold uppercase tracking-wide text-navy-800">Resumen del período</h2>
+    <table class="mt-2 w-full text-sm">
+      <tbody>
+        <tr class="border-b border-ink-200">
+          <td class="py-2 text-ink-700">Monto total cobrado</td>
+          <td class="py-2 text-right font-semibold tabular text-ink-900">
+            {formatCurrency(redLink.totalAmount)}
+          </td>
+        </tr>
+        <tr class="border-b border-ink-200">
+          <td class="py-2 text-ink-700">Cantidad de pagos</td>
+          <td class="py-2 text-right font-semibold tabular text-ink-900">
+            {formatNumber(redLink.totalCount)}
+          </td>
+        </tr>
+        <tr class="border-b border-ink-200">
+          <td class="py-2 text-ink-700">Ticket promedio</td>
+          <td class="py-2 text-right font-semibold tabular text-ink-900">
+            {formatCurrency(redLink.avgTicket)}
+          </td>
+        </tr>
+        <tr class="border-b border-ink-200">
+          <td class="py-2 text-ink-700">Socios únicos que pagaron</td>
+          <td class="py-2 text-right font-semibold tabular text-ink-900">
+            {formatNumber(redLink.uniquePartners)}
+          </td>
+        </tr>
+        <tr class="border-b border-ink-200">
+          <td class="py-2 text-ink-700">Tasa de conciliación</td>
+          <td class="py-2 text-right font-semibold tabular text-ink-900">
+            {formatPercent(redLink.reconciliationRate)} ({formatNumber(redLink.processedCount)} de {formatNumber(redLink.totalCount)})
+          </td>
+        </tr>
+        <tr class="border-b border-ink-200">
+          <td class="py-2 text-ink-700">Archivos importados</td>
+          <td class="py-2 text-right font-semibold tabular text-ink-900">
+            {formatNumber(redLink.totalFiles)} ({formatPercent(redLink.automaticShare)} automáticos)
+          </td>
+        </tr>
+        <tr>
+          <td class="py-2 text-ink-700">Rechazos en envíos REFRESH</td>
+          <td class="py-2 text-right font-semibold tabular text-ink-900">
+            {formatNumber(redLink.deniedCount)}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Detalle mensual -->
+  <section class="mt-7 print:break-inside-avoid">
+    <h2 class="text-base font-bold uppercase tracking-wide text-navy-800">Detalle mensual</h2>
+    <table class="mt-2 w-full text-sm">
+      <thead>
+        <tr class="border-b-2 border-ink-300 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">
+          <th class="py-2">Mes</th>
+          <th class="py-2 text-right">Pagos</th>
+          <th class="py-2 text-right">Monto cobrado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          redLink.monthly.map((m) => (
+            <tr class="border-b border-ink-100">
+              <td class="py-1.5 text-ink-700">{formatYearMonth(m.yearMonth, { withYear: true })}</td>
+              <td class="py-1.5 text-right tabular text-ink-900">{formatNumber(m.count)}</td>
+              <td class="py-1.5 text-right tabular font-semibold text-ink-900">
+                {formatCurrency(m.amount)}
+              </td>
+            </tr>
+          ))
+        }
+        <tr class="border-t-2 border-ink-300 bg-ink-50/50 font-semibold">
+          <td class="py-2 text-ink-900">Total</td>
+          <td class="py-2 text-right tabular text-ink-900">{formatNumber(redLink.totalCount)}</td>
+          <td class="py-2 text-right tabular text-ink-900">{formatCurrency(redLink.totalAmount)}</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Distribución por día de la semana -->
+  <section class="mt-7 print:break-inside-avoid">
+    <h2 class="text-base font-bold uppercase tracking-wide text-navy-800">
+      Distribución por día de la semana
+    </h2>
+    <table class="mt-2 w-full text-sm">
+      <thead>
+        <tr class="border-b-2 border-ink-300 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">
+          <th class="py-2">Día</th>
+          <th class="py-2 text-right">Pagos</th>
+          <th class="py-2 text-right">% del total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          redLink.weekdayDistribution.map((count, i) => {
+            const share = redLink.totalCount > 0 ? count / redLink.totalCount : 0;
+            return (
+              <tr class="border-b border-ink-100">
+                <td class="py-1.5 text-ink-700">{weekdayLabels[i]}</td>
+                <td class="py-1.5 text-right tabular text-ink-900">{formatNumber(count)}</td>
+                <td class="py-1.5 text-right tabular text-ink-600">{formatPercent(share)}</td>
+              </tr>
+            );
+          })
+        }
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Distribución por hora -->
+  <section class="mt-7 print:break-inside-avoid">
+    <h2 class="text-base font-bold uppercase tracking-wide text-navy-800">
+      Distribución por hora del día
+    </h2>
+    <p class="mt-1 text-xs text-ink-500">Se muestran solo las franjas con actividad.</p>
+    <table class="mt-2 w-full text-sm">
+      <thead>
+        <tr class="border-b-2 border-ink-300 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">
+          <th class="py-2">Hora</th>
+          <th class="py-2 text-right">Pagos</th>
+          <th class="py-2 text-right">% del total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          redLink.hourlyDistribution
+            .map((count, hour) => ({ hour, count }))
+            .filter((row) => row.count > 0)
+            .map(({ hour, count }) => {
+              const share = redLink.totalCount > 0 ? count / redLink.totalCount : 0;
+              return (
+                <tr class="border-b border-ink-100">
+                  <td class="py-1.5 tabular text-ink-700">{String(hour).padStart(2, '0')}:00</td>
+                  <td class="py-1.5 text-right tabular text-ink-900">{formatNumber(count)}</td>
+                  <td class="py-1.5 text-right tabular text-ink-600">{formatPercent(share)}</td>
+                </tr>
+              );
+            })
+        }
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Footer -->
+  <footer class="mt-10 border-t border-ink-200 pt-3 text-[11px] text-ink-500">
+    <div class="flex items-center justify-between">
+      <span>Generado por 4x Dashboard de Métricas · {today}</span>
+      <span>Página confidencial — sólo para uso interno del club</span>
+    </div>
+  </footer>
+</PrintLayout>

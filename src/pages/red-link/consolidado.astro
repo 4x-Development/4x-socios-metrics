@@ -1,0 +1,213 @@
+---
+import Layout from '@layouts/Layout.astro';
+import Section from '@components/Section.astro';
+import Card from '@components/Card.astro';
+import KPICard from '@components/KPICard.astro';
+
+import { getClub, loadRedLinkConsolidated } from '@db';
+import {
+  formatCompactCurrency,
+  formatCurrency,
+  formatNumber,
+  formatPercent,
+  formatYearMonth,
+} from '@lib/format';
+
+/**
+ * Cross-club consolidated Red Link view.
+ *
+ * Sums totals over all clubs with a real DB connection (last 12 months).
+ * Clubs without connection — or whose query failed — are listed at the bottom
+ * for transparency, but their data does NOT feed the totals.
+ */
+
+const consolidated = await loadRedLinkConsolidated(12);
+
+const noData = consolidated.includedClubs.length === 0;
+const periodLabel =
+  consolidated.fromYearMonth && consolidated.toYearMonth
+    ? `${formatYearMonth(consolidated.fromYearMonth, { withYear: true })} → ${formatYearMonth(consolidated.toYearMonth, { withYear: true })}`
+    : 'Sin datos';
+---
+
+<Layout
+  title="Red Link — Consolidado"
+  subtitle={`Suma de ${consolidated.includedClubs.length} clubes conectados · ${periodLabel}`}
+>
+  <div class="mb-6 flex items-center justify-between gap-3">
+    <a
+      href="/red-link"
+      class="text-xs font-semibold uppercase tracking-[0.14em] text-navy-700 hover:text-navy-900"
+    >
+      ← Volver al detalle por club
+    </a>
+    <p class="text-xs text-ink-500">
+      {consolidated.includedClubs.length} incluidos · {consolidated.excludedClubs.length} omitidos
+    </p>
+  </div>
+
+  {
+    noData && (
+      <div class="mb-6 rounded-xl border border-warning-500/30 bg-warning-50 p-6 text-sm text-warning-700">
+        <p class="font-semibold">No hay clubes con conexión real configurada.</p>
+        <p class="mt-1 text-xs">
+          Para ver el consolidado, configurá la connection string de al menos un club en{' '}
+          <code class="rounded bg-warning-500/10 px-1.5 py-0.5 font-mono text-[11px]">.env</code>.
+        </p>
+      </div>
+    )
+  }
+
+  <!-- KPI strip -->
+  <Section title="Totales del período" eyebrow="Red Link consolidado">
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <KPICard
+        label="Total cobrado"
+        value={formatCompactCurrency(consolidated.totalAmount)}
+        icon="currency"
+        hint={`${formatNumber(consolidated.totalCount)} pagos`}
+      />
+      <KPICard
+        label="Ticket promedio"
+        value={formatCompactCurrency(consolidated.avgTicket)}
+        icon="spark"
+        hint={`${formatNumber(consolidated.uniquePartners)} socios únicos`}
+      />
+      <KPICard
+        label="Tasa de conciliación"
+        value={formatPercent(consolidated.reconciliationRate)}
+        icon="percent"
+        hint={`${formatNumber(consolidated.processedCount)} de ${formatNumber(consolidated.totalCount)} procesados`}
+      />
+      <KPICard
+        label="Rechazos REFRESH"
+        value={formatNumber(consolidated.deniedCount)}
+        hint="Socios rechazados al enviar deuda"
+        icon="users"
+        positiveWhenUp={false}
+      />
+    </div>
+  </Section>
+
+  <!-- Tabla mensual agregada -->
+  <Section
+    title="Evolución mensual"
+    eyebrow="Suma por mes"
+    subtitle="Cada fila acumula los pagos de Red Link de todos los clubes conectados."
+  >
+    <Card padding="sm">
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-ink-200 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+              <th class="py-3 pr-3 font-semibold">Mes</th>
+              <th class="px-3 py-3 text-right font-semibold">Pagos</th>
+              <th class="px-3 py-3 text-right font-semibold">Monto cobrado</th>
+              <th class="px-3 py-3 text-right font-semibold">Ticket promedio</th>
+              <th class="py-3 pl-3 text-right font-semibold">% del total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              consolidated.monthly.map((m) => {
+                const avgTicket = m.count > 0 ? Math.round(m.amount / m.count) : 0;
+                const share =
+                  consolidated.totalAmount > 0 ? m.amount / consolidated.totalAmount : 0;
+                return (
+                  <tr class="border-b border-ink-100 last:border-0 hover:bg-ink-50/50">
+                    <td class="py-3 pr-3 font-medium text-ink-900">
+                      {formatYearMonth(m.yearMonth, { withYear: true })}
+                    </td>
+                    <td class="px-3 py-3 text-right tabular text-ink-800">
+                      {formatNumber(m.count)}
+                    </td>
+                    <td class="px-3 py-3 text-right tabular font-semibold text-ink-900">
+                      {formatCurrency(m.amount)}
+                    </td>
+                    <td class="px-3 py-3 text-right tabular text-ink-700">
+                      {formatCurrency(avgTicket)}
+                    </td>
+                    <td class="py-3 pl-3 text-right tabular text-ink-600">
+                      {formatPercent(share)}
+                    </td>
+                  </tr>
+                );
+              })
+            }
+            {
+              consolidated.monthly.length > 0 && (
+                <tr class="border-t-2 border-ink-300 bg-ink-50/60 font-semibold">
+                  <td class="py-3 pr-3 text-ink-900">Total</td>
+                  <td class="px-3 py-3 text-right tabular text-ink-900">
+                    {formatNumber(consolidated.totalCount)}
+                  </td>
+                  <td class="px-3 py-3 text-right tabular text-ink-900">
+                    {formatCurrency(consolidated.totalAmount)}
+                  </td>
+                  <td class="px-3 py-3 text-right tabular text-ink-900">
+                    {formatCurrency(consolidated.avgTicket)}
+                  </td>
+                  <td class="py-3 pl-3 text-right tabular text-ink-900">100%</td>
+                </tr>
+              )
+            }
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  </Section>
+
+  <!-- Clubes incluidos / omitidos -->
+  {
+    consolidated.includedClubs.length > 0 && (
+      <Section
+        title="Clubes incluidos"
+        eyebrow="Base de cálculo"
+        subtitle="Los totales de arriba son la suma de la cobranza Red Link de estos clubes."
+      >
+        <div class="flex flex-wrap gap-2">
+          {consolidated.includedClubs.map((id) => {
+            const c = getClub(id);
+            return (
+              <a
+                href={`/red-link/${id}`}
+                class="inline-flex items-center gap-2 rounded-full border border-positive-500/30 bg-positive-50 px-3 py-1 text-xs font-medium text-positive-700 transition hover:bg-positive-500/10"
+              >
+                <span class="h-1.5 w-1.5 rounded-full bg-positive-500" />
+                {c?.shortName ?? id}
+              </a>
+            );
+          })}
+        </div>
+      </Section>
+    )
+  }
+
+  {
+    consolidated.excludedClubs.length > 0 && (
+      <Section
+        title="Clubes omitidos"
+        eyebrow="Transparencia"
+        subtitle="No se incluyeron en el cálculo. Estos son los motivos:"
+      >
+        <Card padding="sm">
+          <ul class="divide-y divide-ink-100">
+            {consolidated.excludedClubs.map((ex) => {
+              const c = getClub(ex.id);
+              return (
+                <li class="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                  <div class="flex items-center gap-2">
+                    <span class="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-ink-400" />
+                    <span class="font-medium text-ink-900">{c?.name ?? ex.id}</span>
+                    {c && <span class="text-xs text-ink-500">· {c.city}</span>}
+                  </div>
+                  <span class="text-xs text-ink-600 sm:max-w-md sm:text-right">{ex.reason}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      </Section>
+    )
+  }
+</Layout>

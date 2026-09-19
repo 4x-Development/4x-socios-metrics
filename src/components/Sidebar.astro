@@ -1,0 +1,61 @@
+---
+import { sidebarNav, navIconPaths } from '@data/navigation';
+
+interface Props {
+  current: string;
+}
+
+const { current } = Astro.props;
+---
+
+<aside
+  class="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-ink-200 bg-white lg:flex"
+>
+  <div class="flex h-16 items-center gap-2.5 border-b border-ink-200 px-6">
+    <span class="text-xl font-extrabold tracking-tight text-navy-900">4x</span>
+    <span class="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-500">
+      Métricas
+    </span>
+  </div>
+
+  <nav class="flex-1 overflow-y-auto py-6">
+    <ul class="space-y-0.5 px-3">
+      {
+        sidebarNav.map((item) => {
+          const active =
+            current === item.href || (item.href !== '/' && current.startsWith(item.href));
+          return (
+            <li>
+              <a
+                href={item.href}
+                class={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition ${
+                  active
+                    ? 'bg-navy-50 text-navy-900'
+                    : 'text-ink-600 hover:bg-ink-50 hover:text-ink-900'
+                }`}
+                aria-current={active ? 'page' : undefined}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill={active ? 'currentColor' : 'none'}
+                  stroke="currentColor"
+                  stroke-width={active ? 0 : 1.5}
+                  class={`h-4 w-4 ${active ? 'text-navy-700' : 'text-ink-500'}`}
+                >
+                  <path fill-rule="evenodd" d={navIconPaths[item.icon]} clip-rule="evenodd" />
+                </svg>
+                {item.label}
+              </a>
+            </li>
+          );
+        })
+      }
+    </ul>
+  </nav>
+
+  <div class="border-t border-ink-200 px-6 py-4 text-[11px] text-ink-500">
+    <p class="font-medium uppercase tracking-[0.14em] text-ink-700">v0.1</p>
+    <p class="mt-1">Datos en vivo desde las bases de cada club</p>
+  </div>
+</aside>

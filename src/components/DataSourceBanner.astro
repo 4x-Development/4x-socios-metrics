@@ -1,0 +1,47 @@
+---
+/**
+ * Says which clubs are behind the numbers on screen, and which are missing.
+ *
+ * There is no mock mode: every figure comes from a club's database. What this
+ * banner communicates is the calculation base — how many clubs answered and
+ * which were left out — so a total is never read as "all the clubs".
+ */
+
+interface Props {
+  included: Array<{ id: string; name: string }>;
+  excluded?: Array<{ id: string; name: string; reason: string }>;
+}
+
+const { included, excluded = [] } = Astro.props;
+---
+
+<div class="mb-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+  {
+    included.length > 0 && (
+      <span class="inline-flex items-center gap-2 text-positive-700">
+        <span class="inline-flex h-1.5 w-1.5 rounded-full bg-positive-500" />
+        Datos en vivo de {included.length} {included.length === 1 ? 'club' : 'clubes'}:{' '}
+        {included.map((c) => c.name).join(' · ')}
+      </span>
+    )
+  }
+
+  {
+    excluded.length > 0 && (
+      <details class="group">
+        <summary class="cursor-pointer list-none text-warning-700">
+          {excluded.length} {excluded.length === 1 ? 'club sin datos' : 'clubes sin datos'} —{' '}
+          <span class="underline decoration-dotted">ver por qué</span>
+        </summary>
+        <ul class="mt-2 space-y-1 rounded-lg border border-warning-500/30 bg-warning-50 p-3">
+          {excluded.map((club) => (
+            <li class="flex flex-wrap items-baseline justify-between gap-x-3 text-warning-700">
+              <span class="font-semibold">{club.name}</span>
+              <span class="font-mono text-[11px]">{club.reason}</span>
+            </li>
+          ))}
+        </ul>
+      </details>
+    )
+  }
+</div>

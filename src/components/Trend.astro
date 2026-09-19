@@ -1,0 +1,45 @@
+---
+import { deltaDirection, formatDeltaPercent } from '@lib/format';
+
+interface Props {
+  current: number;
+  previous: number;
+  /** Higher-is-better by default. Set to false for metrics like overdue where less is better. */
+  positiveWhenUp?: boolean;
+}
+
+const { current, previous, positiveWhenUp = true } = Astro.props;
+const dir = deltaDirection(current, previous);
+const label = formatDeltaPercent(current, previous);
+
+const isPositive =
+  dir === 'flat' ? false : positiveWhenUp ? dir === 'up' : dir === 'down';
+const isNegative =
+  dir === 'flat' ? false : positiveWhenUp ? dir === 'down' : dir === 'up';
+---
+
+<span
+  class:list={[
+    'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular',
+    isPositive && 'bg-positive-50 text-positive-700',
+    isNegative && 'bg-negative-50 text-negative-700',
+    dir === 'flat' && 'bg-ink-100 text-ink-600',
+  ]}
+>
+  {
+    dir === 'up' ? (
+      <svg viewBox="0 0 12 12" fill="currentColor" class="h-2.5 w-2.5">
+        <path d="M6 2L10 8H2L6 2Z" />
+      </svg>
+    ) : dir === 'down' ? (
+      <svg viewBox="0 0 12 12" fill="currentColor" class="h-2.5 w-2.5">
+        <path d="M6 10L2 4H10L6 10Z" />
+      </svg>
+    ) : (
+      <svg viewBox="0 0 12 12" fill="currentColor" class="h-2.5 w-2.5">
+        <path d="M2 5h8v2H2V5Z" />
+      </svg>
+    )
+  }
+  {label}
+</span>

@@ -1,0 +1,184 @@
+---
+import Layout from '@layouts/Layout.astro';
+import Section from '@components/Section.astro';
+import KPICard from '@components/KPICard.astro';
+import Card from '@components/Card.astro';
+import EmptyState from '@components/EmptyState.astro';
+import DataSourceBanner from '@components/DataSourceBanner.astro';
+import InsightList from '@components/InsightList.astro';
+import MembershipTrend from '@components/charts/MembershipTrend.tsx';
+import CategoryBar from '@components/charts/CategoryBar.tsx';
+
+import { consolidatedForMonth, consolidatedSeries, isCurrentMonth, loadDashboard } from '@db';
+import { memberCategoryLabels } from '@data/types';
+import { getMembershipInsights } from '@lib/insights';
+import { formatCompactCurrency, formatNumber, formatPercent, formatYearMonth } from '@lib/format';
+
+const data = await loadDashboard();
+const latest = consolidatedForMonth(data, data.latestMonth);
+const previous = consolidatedForMonth(data, data.previousMonth);
+const series = consolidatedSeries(data);
+const insights = getMembershipInsights(latest, previous);
+
+const periodLabel = formatYearMonth(data.latestMonth, { withYear: true });
+const periodNote = isCurrentMonth(data.latestMonth) ? ' (mes en curso)' : '';
+---
+
+<Layout title="Socios" subtitle={`Evolución del padrón · Período: ${periodLabel}${periodNote}`}>
+  <DataSourceBanner included={data.clubs} excluded={data.excluded} />
+
+  <Section title="Padrón consolidado" eyebrow="Socios">
+    {
+      latest === null ? (
+        <EmptyState
+          title="Sin datos del padrón para el período"
+          excluded={data.excluded}
+        />
+      ) : (
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KPICard
+            label="Socios activos"
+            value={formatNumber(latest.members.active)}
+            current={latest.members.active}
+            previous={previous?.members.active}
+            icon="users"
+          />
+          <KPICard
+            label="Altas del mes"
+            value={formatNumber(latest.members.new)}
+            current={latest.members.new}
+            previous={previous?.members.new}
+          />
+          <KPICard
+            label="Bajas del mes"
+            value={formatNumber(latest.members.resigned)}
+            current={latest.members.resigned}
+            previous={previous?.members.resigned}
+            positiveWhenUp={false}
+          />
+          <KPICard
+            label="Neto del mes"
+            value={
+              latest.members.net >= 0
+                ? `+${formatNumber(latest.members.net)}`
+                : formatNumber(latest.members.net)
+            }
+            current={latest.members.net}
+            previous={previous?.members.net}
+            hint="Altas − Bajas"
+          />
+        </div>
+      )
+    }
+  </Section>
+
+  {
+    insights.length > 0 && (
+      <Section title="Insights del período">
+        <InsightList insights={insights} />
+      </Section>
+    )
+  }
+
+  <Section title="Evolución del padrón" eyebrow="Tendencias">
+    <Card title="Altas, bajas y padrón activo" description="Últimos 12 meses">
+      {
+        series.length > 0 ? (
+          <MembershipTrend series={series} client:load />
+        ) : (
+          <EmptyState title="Sin historial disponible" excluded={data.excluded} />
+        )
+      }
+    </Card>
+  </Section>
+
+  <Section
+    title="Distribución por categoría"
+    eyebrow="Tipos de socio"
+    subtitle="Cuál tipo concentra el padrón y cuál se cobra mejor."
+  >
+    {
+      latest === null || latest.byCategory.length === 0 ? (
+        <EmptyState title="Sin categorías con socios activos en el período" />
+      ) : (
+        <div class="grid gap-4 lg:grid-cols-5">
+          <div class="lg:col-span-2">
+            <Card title="Socios por categoría" description={`Período ${periodLabel}`}>
+              <CategoryBar categories={latest.byCategory} client:load />
+            </Card>
+          </div>
+          <div class="lg:col-span-3">
+            <Card title="Detalle por categoría" padding="sm">
+              <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                  <thead>
+                    <tr class="border-b border-ink-200 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+                      <th class="py-3 pr-3 font-semibold">Categoría</th>
+                      <th class="px-3 py-3 text-right font-semibold">Activos</th>
+                      <th class="px-3 py-3 text-right font-semibold">Cobrado</th>
+                      <th class="px-3 py-3 text-right font-semibold">Cobranzas</th>
+                      <th class="py-3 pl-3 text-right font-semibold">Tasa</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...latest.byCategory]
+                      .sort((a, b) => b.active - a.active)
+                      .map((c) => (
+                        <tr class="border-b border-ink-100 last:border-0">
+                          <td class="py-3 pr-3 font-medium text-ink-900">
+                            {memberCategoryLabels[c.category]}
+                          </td>
+                          <td class="px-3 py-3 text-right tabular text-ink-800">
+                            {formatNumber(c.active)}
+                          </td>
+                          <td class="px-3 py-3 text-right tabular font-semibold text-ink-900">
+                            {formatCompactCurrency(c.amount)}
+                          </td>
+                          <td class="px-3 py-3 text-right tabular text-ink-700">
+                            {formatNumber(c.collectionsCount)}
+                          </td>
+                          <td class="py-3 pl-3 text-right tabular">
+                            <span
+                              class:list={[
+                                c.collectionRate >= 0.9 && 'text-positive-700',
+                                c.collectionRate < 0.9 && c.collectionRate >= 0.8 && 'text-ink-700',
+                                c.collectionRate < 0.8 && 'text-negative-700',
+                              ]}
+                            >
+                              {formatPercent(c.collectionRate)}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )
+    }
+  </Section>
+
+  {
+    latest !== null && latest.members.familyGroups > 0 && (
+      <Section title="Grupos familiares" eyebrow="Composición">
+        <div class="grid gap-4 sm:grid-cols-3">
+          <Card title="Grupos familiares" description="Cantidad activa">
+            <p class="text-3xl font-extrabold text-ink-900 tabular">
+              {formatNumber(latest.members.familyGroups)}
+            </p>
+          </Card>
+          <Card title="Tamaño promedio" description="Integrantes por grupo">
+            <p class="text-3xl font-extrabold text-ink-900 tabular">{latest.members.avgFamilySize}</p>
+          </Card>
+          <Card title="Tasa de retención" description="1 − (bajas / activos)">
+            <p class="text-3xl font-extrabold text-ink-900 tabular">
+              {formatPercent(latest.members.retentionRate)}
+            </p>
+          </Card>
+        </div>
+      </Section>
+    )
+  }
+</Layout>

@@ -1,0 +1,247 @@
+---
+import Layout from '@layouts/Layout.astro';
+import Section from '@components/Section.astro';
+import KPICard from '@components/KPICard.astro';
+import Card from '@components/Card.astro';
+import EmptyState from '@components/EmptyState.astro';
+import BookingsByPlace from '@components/charts/BookingsByPlace.tsx';
+import HourlyHeatmap from '@components/charts/HourlyHeatmap.tsx';
+import WeekdayDistribution from '@components/charts/WeekdayDistribution.tsx';
+import MonthlyVolumeTrend from '@components/charts/MonthlyVolumeTrend.tsx';
+
+import {
+  consolidatedBookings,
+  getClub,
+  latestMonth,
+  loadBookingTrend,
+  loadBookings,
+  isCurrentMonth,
+  previousMonth,
+} from '@db';
+import { rentalPlaceTypeLabels, type RentalPlaceType } from '@data/types';
+import { formatCompactCurrency, formatNumber, formatPercent, formatYearMonth } from '@lib/format';
+
+const current = await loadBookings(latestMonth);
+const prior = await loadBookings(previousMonth);
+
+const latest = consolidatedBookings(current.byClub, latestMonth);
+const previous = consolidatedBookings(prior.byClub, previousMonth);
+
+const clubsWithRentals = current.byClub.map((b) => b.clubId);
+const series = await loadBookingTrend(clubsWithRentals, 12);
+
+const periodLabel = formatYearMonth(latestMonth, { withYear: true });
+const periodNote = isCurrentMonth(latestMonth) ? ' (mes en curso)' : '';
+
+const byType = new Map<RentalPlaceType, { bookings: number; amount: number }>();
+for (const p of latest?.byPlace ?? []) {
+  const cur = byType.get(p.type) ?? { bookings: 0, amount: 0 };
+  cur.bookings += p.bookings;
+  cur.amount += p.amount;
+  byType.set(p.type, cur);
+}
+const typeRanking = [...byType.entries()]
+  .map(([type, v]) => ({ type, ...v }))
+  .sort((a, b) => b.amount - a.amount);
+
+const topPlace = latest?.byPlace[0];
+
+const peakHour = (latest?.hourlyDistribution ?? []).reduce(
+  (best, value, hour) => (value > best.value ? { hour, value } : best),
+  { hour: 0, value: 0 },
+);
+
+const weekdayLabels = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const peakDay = (latest?.weekdayDistribution ?? []).reduce(
+  (best, value, idx) => (value > best.value ? { idx, value } : best),
+  { idx: 0, value: 0 },
+);
+
+const withoutBookingsNames = current.withoutBookings
+  .map((id) => getClub(id)?.shortName ?? id)
+  .join(', ');
+---
+
+<Layout
+  title="Reservas de canchas"
+  subtitle={`${current.byClub.length} clubes con reservas · Período: ${periodLabel}${periodNote}`}
+>
+  {
+    latest === null ? (
+      <Section title="Reservas" eyebrow="Sin datos">
+        <EmptyState
+          title="Ningún club registró reservas en el período"
+          detail={
+            withoutBookingsNames
+              ? `Sin reservas cargadas en: ${withoutBookingsNames}.`
+              : undefined
+          }
+          excluded={current.excluded}
+        />
+      </Section>
+    ) : (
+      <Fragment>
+        <Section title="Resumen del período" eyebrow="Reservas">
+          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <KPICard
+              label="Reservas del mes"
+              value={formatNumber(latest.total)}
+              current={latest.total}
+              previous={previous?.total}
+            />
+            <KPICard
+              label="Recaudado por reservas"
+              value={formatCompactCurrency(latest.amount)}
+              current={latest.amount}
+              previous={previous?.amount}
+              icon="currency"
+            />
+            <KPICard
+              label="Ocupación promedio"
+              value={formatPercent(latest.occupancyRate)}
+              current={latest.occupancyRate}
+              previous={previous?.occupancyRate}
+              icon="percent"
+            />
+            <KPICard
+              label="Ticket promedio"
+              value={formatCompactCurrency(latest.avgTicket)}
+              current={latest.avgTicket}
+              previous={previous?.avgTicket}
+              icon="spark"
+            />
+          </div>
+          {current.withoutBookings.length > 0 && (
+            <p class="mt-3 text-xs text-ink-500">
+              Sin reservas en el período: {withoutBookingsNames}.
+            </p>
+          )}
+        </Section>
+
+        <Section title="Lo destacado del mes" eyebrow="Highlights">
+          <div class="grid gap-3 sm:grid-cols-3">
+            {topPlace && (
+              <div class="rounded-lg border border-positive-500/30 bg-positive-50 p-3.5 text-sm text-positive-700">
+                <p class="text-[11px] font-semibold uppercase tracking-wide">Cancha más rentable</p>
+                <p class="mt-1 text-base font-bold">{topPlace.name}</p>
+                <p class="text-xs opacity-80">
+                  {formatCompactCurrency(topPlace.amount)} · {formatNumber(topPlace.bookings)} reservas
+                </p>
+              </div>
+            )}
+            {peakHour.value > 0 && (
+              <div class="rounded-lg border border-navy-300/30 bg-navy-50 p-3.5 text-sm text-navy-900">
+                <p class="text-[11px] font-semibold uppercase tracking-wide">Hora pico</p>
+                <p class="mt-1 text-base font-bold">
+                  {String(peakHour.hour).padStart(2, '0')}:00 hs
+                </p>
+                <p class="text-xs opacity-80">
+                  {formatNumber(peakHour.value)} reservas concentradas en esa franja
+                </p>
+              </div>
+            )}
+            {peakDay.value > 0 && (
+              <div class="rounded-lg border border-warning-500/30 bg-warning-50 p-3.5 text-sm text-warning-700">
+                <p class="text-[11px] font-semibold uppercase tracking-wide">Día más reservado</p>
+                <p class="mt-1 text-base font-bold">{weekdayLabels[peakDay.idx]}</p>
+                <p class="text-xs opacity-80">{formatNumber(peakDay.value)} reservas en el día</p>
+              </div>
+            )}
+          </div>
+        </Section>
+
+        <Section title="Composición del público" eyebrow="Socios vs. invitados">
+          <div class="grid gap-4 lg:grid-cols-3">
+            <Card title="Reservas por socios" description="Acceso con cuenta activa">
+              <p class="text-3xl font-extrabold text-ink-900 tabular">
+                {formatNumber(latest.partnerBookings)}
+              </p>
+              <p class="mt-1 text-xs text-ink-500">
+                {latest.total > 0 && formatPercent(latest.partnerBookings / latest.total)} del total
+              </p>
+            </Card>
+            <Card title="Reservas por invitados" description="Sin cuenta de socio">
+              <p class="text-3xl font-extrabold text-ink-900 tabular">
+                {formatNumber(latest.guestBookings)}
+              </p>
+              <p class="mt-1 text-xs text-ink-500">
+                {latest.total > 0 && formatPercent(latest.guestBookings / latest.total)} del total
+              </p>
+            </Card>
+            <Card title="Tasa de cancelación" description="Reservas anuladas / totales">
+              <p class="text-3xl font-extrabold text-ink-900 tabular">
+                {formatPercent(latest.cancelledRate)}
+              </p>
+            </Card>
+          </div>
+        </Section>
+
+        <Section
+          title="Detalle por cancha"
+          eyebrow="Por instalación"
+          subtitle="Ordenadas por recaudación. Las canchas en rojo tienen baja ocupación."
+        >
+          {latest.byPlace.length > 0 ? (
+            <Fragment>
+              <Card padding="sm">
+                <BookingsByPlace places={latest.byPlace} client:load />
+              </Card>
+
+              <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {typeRanking.map((t) => (
+                  <div class="rounded-xl border border-ink-200 bg-white p-4">
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+                      {rentalPlaceTypeLabels[t.type]}
+                    </p>
+                    <p class="mt-1 text-xl font-extrabold text-ink-900 tabular">
+                      {formatCompactCurrency(t.amount)}
+                    </p>
+                    <p class="mt-0.5 text-xs text-ink-500">{formatNumber(t.bookings)} reservas</p>
+                  </div>
+                ))}
+              </div>
+            </Fragment>
+          ) : (
+            <EmptyState title="Sin canchas con reservas en el período" />
+          )}
+        </Section>
+
+        <Section title="Patrones de uso" eyebrow="Cuándo se usan las canchas">
+          <div class="grid gap-4 lg:grid-cols-2">
+            <Card title="Por día de la semana" description={`Período ${periodLabel}`}>
+              <WeekdayDistribution
+                weekday={latest.weekdayDistribution}
+                countLabel="Reservas"
+                client:load
+              />
+            </Card>
+            <Card
+              title="Por hora del día"
+              description="Detectá la franja pico para subir precios o promocionar horarios bajos"
+            >
+              <HourlyHeatmap hourly={latest.hourlyDistribution} client:load />
+            </Card>
+          </div>
+        </Section>
+
+        <Section title="Evolución mensual" eyebrow="Tendencia">
+          <Card title="Reservas y recaudación" description="Últimos 12 meses">
+            {series.length > 0 ? (
+              <MonthlyVolumeTrend
+                series={series.map((s) => ({
+                  yearMonth: s.yearMonth,
+                  total: s.bookings,
+                  amount: s.amount,
+                }))}
+                countLabel="Reservas"
+                client:load
+              />
+            ) : (
+              <EmptyState title="Sin historial de reservas" />
+            )}
+          </Card>
+        </Section>
+      </Fragment>
+    )
+  }
+</Layout>

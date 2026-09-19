@@ -1,0 +1,17 @@
+---
+/**
+ * Landing of the Red Link section.
+ *
+ * The actual data lives at /red-link/[club]. This index just picks a sensible
+ * default (the first club with a real connection, falling back to the first
+ * in the catalog) and redirects.
+ *
+ * Visiting /red-link from the sidebar lands the user on a club with live data
+ * whenever possible.
+ */
+
+import { clubs, hasClubConnection } from '@db';
+
+const defaultClub = clubs.find((c) => hasClubConnection(c.id)) ?? clubs[0];
+return Astro.redirect(`/red-link/${defaultClub.id}`);
+---

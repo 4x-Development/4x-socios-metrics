@@ -1,0 +1,60 @@
+---
+import Layout from '@layouts/Layout.astro';
+import Section from '@components/Section.astro';
+import Card from '@components/Card.astro';
+import EmptyState from '@components/EmptyState.astro';
+import DataSourceBanner from '@components/DataSourceBanner.astro';
+import ClubsComparison from '@components/charts/ClubsComparison.tsx';
+
+import { clubSeries, loadDashboard, monthSlice } from '@db';
+import { bestChannelByClub } from '@lib/insights';
+import { formatYearMonth } from '@lib/format';
+
+const data = await loadDashboard();
+const clubLatest = monthSlice(data, data.latestMonth);
+const clubPrevious = monthSlice(data, data.previousMonth);
+const seriesByClub = data.clubs.map((c) => {
+  const s = clubSeries(data, c.id);
+  return {
+    clubId: c.id,
+    amounts: s.map((m) => m.collections.amount),
+    actives: s.map((m) => m.members.active),
+  };
+});
+
+const periodLabel = formatYearMonth(data.latestMonth, { withYear: true });
+---
+
+<Layout
+  title="Comparativa entre clubes"
+  subtitle={`${data.clubs.length} clubes con datos · Período: ${periodLabel}`}
+>
+  <DataSourceBanner included={data.clubs} excluded={data.excluded} />
+
+  <Section
+    title="Ranking del mes"
+    eyebrow="Multi-club"
+    subtitle="Clic en el nombre del club para entrar al detalle."
+  >
+    {
+      clubLatest.length > 0 ? (
+        <Card padding="sm">
+          <ClubsComparison
+            clubs={data.clubs}
+            latest={clubLatest}
+            previous={clubPrevious}
+            series={seriesByClub}
+            bestChannel={bestChannelByClub(clubLatest)}
+            client:load
+          />
+        </Card>
+      ) : (
+        <EmptyState
+          title="Sin clubes con datos en el período"
+          detail="Revisá las connection strings o el estado de las bases."
+          excluded={data.excluded}
+        />
+      )
+    }
+  </Section>
+</Layout>

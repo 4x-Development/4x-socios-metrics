@@ -1,0 +1,43 @@
+---
+import '../styles/global.css';
+import Sidebar from '@components/Sidebar.astro';
+import Topbar from '@components/Topbar.astro';
+
+interface Props {
+  title: string;
+  subtitle?: string;
+  pageTitle?: string;
+}
+
+const { title, subtitle, pageTitle } = Astro.props;
+const fullTitle = pageTitle ?? `${title} — 4x Métricas`;
+const current = Astro.url.pathname;
+---
+
+<!doctype html>
+<html lang="es-AR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{fullTitle}</title>
+    <meta name="description" content="Tablero de métricas multi-club de Sistema de Socios — 4x." />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="antialiased">
+    <Sidebar current={current} />
+    <div class="lg:pl-60">
+      <Topbar title={title} subtitle={subtitle} />
+      <main class="px-4 py-6 sm:px-6">
+        <slot />
+      </main>
+    </div>
+  </body>
+</html>

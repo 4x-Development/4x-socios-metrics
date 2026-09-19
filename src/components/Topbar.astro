@@ -1,0 +1,48 @@
+---
+import { clubs } from '@data/clubs';
+import { latestMonth, months } from '@data/periods';
+import { formatYearMonth } from '@lib/format';
+
+interface Props {
+  title: string;
+  subtitle?: string;
+}
+
+const { title, subtitle } = Astro.props;
+---
+
+<header class="sticky top-0 z-30 border-b border-ink-200 bg-white/95 backdrop-blur">
+  <div class="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:pl-6">
+    <div class="min-w-0">
+      <h1 class="truncate text-lg font-bold text-ink-900">{title}</h1>
+      {subtitle && <p class="truncate text-xs text-ink-500">{subtitle}</p>}
+    </div>
+
+    <div class="flex items-center gap-2">
+      <label class="hidden items-center gap-2 sm:flex">
+        <span class="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Club</span>
+        <select
+          class="rounded-md border border-ink-200 bg-white px-2 py-1.5 text-sm text-ink-900 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-100"
+        >
+          <option value="all">Todos los clubes</option>
+          {clubs.map((c) => <option value={c.id}>{c.shortName}</option>)}
+        </select>
+      </label>
+
+      <label class="hidden items-center gap-2 sm:flex">
+        <span class="text-[11px] font-semibold uppercase tracking-wide text-ink-500">Período</span>
+        <select
+          class="rounded-md border border-ink-200 bg-white px-2 py-1.5 text-sm text-ink-900 focus:border-navy-400 focus:outline-none focus:ring-2 focus:ring-navy-100"
+        >
+          {
+            [...months].reverse().map((m) => (
+              <option value={m} selected={m === latestMonth}>
+                {formatYearMonth(m, { withYear: true })}
+              </option>
+            ))
+          }
+        </select>
+      </label>
+    </div>
+  </div>
+</header>

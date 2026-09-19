@@ -1,0 +1,94 @@
+---
+import Layout from '@layouts/Layout.astro';
+import Section from '@components/Section.astro';
+import Card from '@components/Card.astro';
+import EmptyState from '@components/EmptyState.astro';
+import CashierRanking from '@components/charts/CashierRanking.tsx';
+
+import { clubs, getClub, latestMonth, loadCashiers, loadSyncIssues } from '@db';
+import { paymentChannelLabels } from '@data/types';
+import { formatYearMonth } from '@lib/format';
+
+const periodLabel = formatYearMonth(latestMonth, { withYear: true });
+
+const { cashiers, excluded: cashierExcluded } = await loadCashiers(latestMonth);
+const { issues, withoutGateway, excluded: syncExcluded } = await loadSyncIssues();
+
+const totalPending = issues.reduce((acc, i) => acc + i.pendingCount, 0);
+---
+
+<Layout title="Operacional" subtitle={`Cobradores y sincronización · Período: ${periodLabel}`}>
+  <Section
+    title="Ranking de cobradores"
+    eyebrow="Equipo"
+    subtitle="Por monto recaudado en el período. Incluye los cobradores virtuales que el sistema usa para Red Link y Mercado Pago."
+  >
+    {
+      cashiers.length > 0 ? (
+        <Card padding="sm">
+          <CashierRanking cashiers={cashiers} clubs={clubs} limit={10} client:load />
+        </Card>
+      ) : (
+        <EmptyState
+          title="Sin cobranza registrada en el período"
+          excluded={cashierExcluded}
+        />
+      )
+    }
+  </Section>
+
+  <Section
+    title="Pagos pendientes de sincronización"
+    eyebrow="Sincronización"
+    subtitle={
+      issues.length > 0
+        ? `${totalPending} pagos aprobados que todavía no impactaron en un recibo.`
+        : 'Pagos aprobados en la pasarela que todavía no impactaron en un recibo.'
+    }
+  >
+    {
+      issues.length === 0 ? (
+        <EmptyState
+          title="Nada pendiente de sincronizar"
+          detail={
+            withoutGateway.length > 0
+              ? `Sin actividad de Mercado Pago en: ${withoutGateway
+                  .map((id) => getClub(id)?.shortName ?? id)
+                  .join(', ')}.`
+              : undefined
+          }
+          excluded={syncExcluded}
+        />
+      ) : (
+        <div class="grid gap-3 sm:grid-cols-2">
+          {issues.map((issue) => {
+            const club = getClub(issue.clubId);
+            const ageHours = issue.oldestAt
+              ? Math.floor((Date.now() - new Date(issue.oldestAt).getTime()) / (1000 * 60 * 60))
+              : null;
+            return (
+              <div class="rounded-xl border border-warning-500/30 bg-warning-50 p-4">
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-warning-700">
+                      {paymentChannelLabels[issue.channel]}
+                    </p>
+                    <p class="mt-1 text-sm font-bold text-ink-900">{club?.name}</p>
+                  </div>
+                  <span class="rounded-full bg-warning-500 px-2 py-0.5 text-[11px] font-bold text-white tabular">
+                    {issue.pendingCount}
+                  </span>
+                </div>
+                {ageHours !== null && (
+                  <p class="mt-3 text-xs text-warning-700">
+                    El más antiguo lleva {ageHours} horas pendiente.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )
+    }
+  </Section>
+</Layout>

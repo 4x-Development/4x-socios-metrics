@@ -1,0 +1,175 @@
+---
+import Layout from '@layouts/Layout.astro';
+import Section from '@components/Section.astro';
+import KPICard from '@components/KPICard.astro';
+import Card from '@components/Card.astro';
+import EmptyState from '@components/EmptyState.astro';
+import DataSourceBanner from '@components/DataSourceBanner.astro';
+import InsightList from '@components/InsightList.astro';
+import ChannelDonut from '@components/charts/ChannelDonut.tsx';
+import CollectionTrend from '@components/charts/CollectionTrend.tsx';
+import MembershipTrend from '@components/charts/MembershipTrend.tsx';
+import ClubsComparison from '@components/charts/ClubsComparison.tsx';
+
+import {
+  clubSeries,
+  consolidatedForMonth,
+  consolidatedSeries,
+  loadDashboard,
+  isCurrentMonth,
+  monthSlice,
+} from '@db';
+import { bestChannelByClub, getCollectionsInsights } from '@lib/insights';
+import { formatCompactCurrency, formatNumber, formatPercent, formatYearMonth } from '@lib/format';
+
+const data = await loadDashboard();
+const latest = consolidatedForMonth(data, data.latestMonth);
+const previous = consolidatedForMonth(data, data.previousMonth);
+const series = consolidatedSeries(data);
+const insights = getCollectionsInsights(latest, previous);
+
+const clubLatest = monthSlice(data, data.latestMonth);
+const clubPrevious = monthSlice(data, data.previousMonth);
+const seriesByClub = data.clubs.map((c) => {
+  const s = clubSeries(data, c.id);
+  return {
+    clubId: c.id,
+    amounts: s.map((m) => m.collections.amount),
+    actives: s.map((m) => m.members.active),
+  };
+});
+
+const periodLabel = formatYearMonth(data.latestMonth, { withYear: true });
+const periodNote = isCurrentMonth(data.latestMonth) ? ' (mes en curso)' : '';
+---
+
+<Layout
+  title="Resumen consolidado"
+  subtitle={`Período: ${periodLabel}${periodNote} · ${data.clubs.length} clubes con datos`}
+>
+  <DataSourceBanner included={data.clubs} excluded={data.excluded} />
+
+  <Section title="Indicadores principales" eyebrow="Consolidado">
+    {
+      latest === null ? (
+        <EmptyState
+          title="Sin datos para el período"
+          detail="Ningún club devolvió información para este mes."
+          excluded={data.excluded}
+        />
+      ) : (
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KPICard
+            label="Socios activos"
+            value={formatNumber(latest.members.active)}
+            current={latest.members.active}
+            previous={previous?.members.active}
+            icon="users"
+          />
+          <KPICard
+            label="Cobrado del mes"
+            value={formatCompactCurrency(latest.collections.amount)}
+            current={latest.collections.amount}
+            previous={previous?.collections.amount}
+            icon="currency"
+          />
+          <KPICard
+            label="Cobrabilidad"
+            value={formatPercent(latest.collections.amountCollectionRate)}
+            current={latest.collections.amountCollectionRate}
+            previous={previous?.collections.amountCollectionRate}
+            hint="Cobrado sobre facturado"
+            icon="percent"
+          />
+          <KPICard
+            label="Ticket promedio"
+            value={formatCompactCurrency(latest.collections.avgTicket)}
+            current={latest.collections.avgTicket}
+            previous={previous?.collections.avgTicket}
+            icon="spark"
+          />
+        </div>
+      )
+    }
+  </Section>
+
+  {
+    insights.length > 0 && (
+      <Section title="Insights del período">
+        <InsightList insights={insights} />
+      </Section>
+    )
+  }
+
+  <Section
+    title="Cobranza"
+    eyebrow="Resumen ejecutivo"
+    subtitle="Mirá el detalle por canal en la sección Cobranza."
+  >
+    <div class="grid gap-4 lg:grid-cols-5">
+      <div class="lg:col-span-2">
+        <Card title="Distribución por canal" description={`Período ${periodLabel}`}>
+          {
+            latest && latest.byChannel.length > 0 ? (
+              <ChannelDonut channels={latest.byChannel} client:load />
+            ) : (
+              <EmptyState
+                title="Sin pagos clasificados"
+                detail="No hay cobranza imputada a un canal en este período."
+              />
+            )
+          }
+        </Card>
+      </div>
+      <div class="lg:col-span-3">
+        <Card title="Cobrado consolidado" description="Últimos 12 meses">
+          {
+            series.length > 0 ? (
+              <CollectionTrend series={series} client:load />
+            ) : (
+              <EmptyState title="Sin historial disponible" />
+            )
+          }
+        </Card>
+      </div>
+    </div>
+  </Section>
+
+  <Section title="Socios" eyebrow="Evolución del padrón">
+    <Card title="Altas, bajas y padrón activo" description="Últimos 12 meses">
+      {
+        series.length > 0 ? (
+          <MembershipTrend series={series} client:load />
+        ) : (
+          <EmptyState title="Sin historial disponible" excluded={data.excluded} />
+        )
+      }
+    </Card>
+  </Section>
+
+  <Section
+    title="Clubes"
+    eyebrow="Comparativa"
+    subtitle="Ordená por cobrado, tasa o ticket. Clic en el nombre para entrar al detalle."
+  >
+    {
+      clubLatest.length > 0 ? (
+        <Card padding="sm">
+          <ClubsComparison
+            clubs={data.clubs}
+            latest={clubLatest}
+            previous={clubPrevious}
+            series={seriesByClub}
+            bestChannel={bestChannelByClub(clubLatest)}
+            client:load
+          />
+        </Card>
+      ) : (
+        <EmptyState
+          title="Sin clubes con datos en el período"
+          excluded={data.excluded}
+        />
+      )
+    }
+  </Section>
+</Layout>

@@ -1,0 +1,117 @@
+---
+import Section from './Section.astro';
+import Card from './Card.astro';
+import KPICard from './KPICard.astro';
+import MonthlyVolumeTrend from './charts/MonthlyVolumeTrend.tsx';
+import HourlyHeatmap from './charts/HourlyHeatmap.tsx';
+import WeekdayDistribution from './charts/WeekdayDistribution.tsx';
+
+import type { RedLinkSummary } from '@data/types';
+import { formatCompactCurrency, formatNumber, formatPercent, formatYearMonth } from '@lib/format';
+
+interface Props {
+  summary: RedLinkSummary;
+}
+
+const { summary } = Astro.props;
+
+const trendSeries = summary.monthly.map((m) => ({
+  yearMonth: m.yearMonth,
+  total: m.count,
+  amount: m.amount,
+}));
+
+const periodLabel =
+  summary.fromYearMonth && summary.toYearMonth
+    ? `${formatYearMonth(summary.fromYearMonth, { withYear: true })} → ${formatYearMonth(summary.toYearMonth, { withYear: true })}`
+    : 'Sin datos en el período';
+
+const peakHour = summary.hourlyDistribution.reduce(
+  (best, value, hour) => (value > best.value ? { hour, value } : best),
+  { hour: 0, value: 0 },
+);
+const weekdayLabels = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const peakDay = summary.weekdayDistribution.reduce(
+  (best, value, idx) => (value > best.value ? { idx, value } : best),
+  { idx: 0, value: 0 },
+);
+---
+
+<Section
+  title="Cobros recibidos por Red Link"
+  eyebrow={`Últimos ${summary.monthsBack} meses`}
+  subtitle={`Pagos importados desde los archivos EXTRACT de Red Link · ${periodLabel}`}
+>
+  <!-- KPI strip -->
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <KPICard
+      label="Cobrado por Red Link"
+      value={formatCompactCurrency(summary.totalAmount)}
+      icon="currency"
+      hint={`${formatNumber(summary.totalCount)} pagos`}
+    />
+    <KPICard
+      label="Ticket promedio"
+      value={formatCompactCurrency(summary.avgTicket)}
+      icon="spark"
+      hint={`${formatNumber(summary.uniquePartners)} socios distintos`}
+    />
+    <KPICard
+      label="Tasa de conciliación"
+      value={formatPercent(summary.reconciliationRate)}
+      icon="percent"
+      hint={`${formatNumber(summary.processedCount)} de ${formatNumber(summary.totalCount)} procesados`}
+    />
+    <KPICard
+      label="Rechazos en REFRESH"
+      value={formatNumber(summary.deniedCount)}
+      hint="Socios rechazados al enviar deuda a Red Link"
+      icon="users"
+      positiveWhenUp={false}
+    />
+  </div>
+
+  <!-- Tendencia mensual -->
+  <div class="mt-6">
+    <Card title="Evolución mensual" description={`Monto y cantidad de pagos · ${summary.monthsBack} meses`}>
+      <MonthlyVolumeTrend series={trendSeries} countLabel="Pagos" client:load />
+    </Card>
+  </div>
+
+  <!-- Highlights y archivos -->
+  <div class="mt-6 grid gap-4 lg:grid-cols-3">
+    <div class="rounded-xl border border-navy-300/30 bg-navy-50 p-4 text-sm text-navy-900">
+      <p class="text-[11px] font-semibold uppercase tracking-wide">Hora pico</p>
+      <p class="mt-1 text-2xl font-extrabold tabular">
+        {String(peakHour.hour).padStart(2, '0')}:00 hs
+      </p>
+      <p class="text-xs opacity-80">{formatNumber(peakHour.value)} pagos en esa franja</p>
+    </div>
+    <div class="rounded-xl border border-positive-500/30 bg-positive-50 p-4 text-sm text-positive-700">
+      <p class="text-[11px] font-semibold uppercase tracking-wide">Día más activo</p>
+      <p class="mt-1 text-2xl font-extrabold">{weekdayLabels[peakDay.idx]}</p>
+      <p class="text-xs opacity-80">{formatNumber(peakDay.value)} pagos acumulados</p>
+    </div>
+    <div class="rounded-xl border border-ink-200 bg-white p-4 text-sm">
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+        Archivos importados
+      </p>
+      <p class="mt-1 text-2xl font-extrabold tabular text-ink-900">
+        {formatNumber(summary.totalFiles)}
+      </p>
+      <p class="text-xs text-ink-500">
+        {formatPercent(summary.automaticShare)} automáticos · {formatNumber(summary.automaticFiles)} sin intervención manual
+      </p>
+    </div>
+  </div>
+
+  <!-- Distribuciones temporales -->
+  <div class="mt-6 grid gap-4 lg:grid-cols-2">
+    <Card title="Por día de la semana" description="Cuándo se reciben los pagos">
+      <WeekdayDistribution weekday={summary.weekdayDistribution} countLabel="Pagos" client:load />
+    </Card>
+    <Card title="Por hora del día" description="Franjas con mayor actividad de cobranza">
+      <HourlyHeatmap hourly={summary.hourlyDistribution} client:load />
+    </Card>
+  </div>
+</Section>

@@ -1,0 +1,36 @@
+---
+/**
+ * Shown wherever a metric has no data behind it.
+ *
+ * The dashboard never fills a gap with sample numbers: a section either shows
+ * what the club's database returned, or says plainly that there is nothing to
+ * show and why.
+ */
+
+interface Props {
+  title: string;
+  detail?: string;
+  /** Clubs left out of this section, with the reason each was excluded. */
+  excluded?: Array<{ id: string; name: string; reason: string }>;
+}
+
+const { title, detail, excluded = [] } = Astro.props;
+---
+
+<div class="rounded-xl border border-dashed border-ink-200 bg-ink-50/50 p-6 text-center">
+  <p class="text-sm font-semibold text-ink-700">{title}</p>
+  {detail && <p class="mx-auto mt-1 max-w-xl text-xs text-ink-500">{detail}</p>}
+
+  {
+    excluded.length > 0 && (
+      <ul class="mx-auto mt-4 max-w-xl space-y-1 text-left">
+        {excluded.map((club) => (
+          <li class="flex items-start justify-between gap-3 rounded-md bg-white px-3 py-1.5 text-xs">
+            <span class="font-medium text-ink-700">{club.name}</span>
+            <span class="text-ink-500">{club.reason}</span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+</div>

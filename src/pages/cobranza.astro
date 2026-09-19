@@ -1,0 +1,209 @@
+---
+import Layout from '@layouts/Layout.astro';
+import Section from '@components/Section.astro';
+import KPICard from '@components/KPICard.astro';
+import Card from '@components/Card.astro';
+import EmptyState from '@components/EmptyState.astro';
+import DataSourceBanner from '@components/DataSourceBanner.astro';
+import InsightList from '@components/InsightList.astro';
+import ChannelDonut from '@components/charts/ChannelDonut.tsx';
+import ChannelTrend from '@components/charts/ChannelTrend.tsx';
+import ChannelTable from '@components/charts/ChannelTable.tsx';
+import OverdueAging from '@components/charts/OverdueAging.tsx';
+
+import {
+  consolidatedForMonth,
+  consolidatedSeries,
+  isCurrentMonth,
+  loadDashboard,
+  loadOverdueBuckets,
+} from '@db';
+import { paymentChannelLabels } from '@data/types';
+import { getCollectionsInsights } from '@lib/insights';
+import { formatCompactCurrency, formatNumber, formatPercent, formatYearMonth } from '@lib/format';
+
+const data = await loadDashboard();
+const latest = consolidatedForMonth(data, data.latestMonth);
+const previous = consolidatedForMonth(data, data.previousMonth);
+const series = consolidatedSeries(data);
+const insights = getCollectionsInsights(latest, previous);
+const { buckets: overdueBuckets, excluded: overdueExcluded } = await loadOverdueBuckets();
+
+const periodLabel = formatYearMonth(data.latestMonth, { withYear: true });
+const periodNote = isCurrentMonth(data.latestMonth) ? ' (mes en curso)' : '';
+
+const channels = latest?.byChannel ?? [];
+const bestChannel = [...channels].sort((a, b) => b.amount - a.amount)[0];
+const highestTicket = [...channels].sort((a, b) => b.avgTicket - a.avgTicket)[0];
+const fastestChannel = [...channels]
+  .filter((c) => c.avgDaysToCollect > 0)
+  .sort((a, b) => a.avgDaysToCollect - b.avgDaysToCollect)[0];
+const hasOverdue = overdueBuckets.some((b) => b.amount > 0 || b.count > 0);
+---
+
+<Layout title="Cobranza" subtitle={`Análisis por canal · Período: ${periodLabel}${periodNote}`}>
+  <DataSourceBanner included={data.clubs} excluded={data.excluded} />
+
+  <Section title="Resumen del período" eyebrow="Cobranza">
+    {
+      latest === null ? (
+        <EmptyState title="Sin cobranza registrada en el período" excluded={data.excluded} />
+      ) : (
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <KPICard
+            label="Cobrado total"
+            value={formatCompactCurrency(latest.collections.amount)}
+            current={latest.collections.amount}
+            previous={previous?.collections.amount}
+            icon="currency"
+          />
+          <KPICard
+            label="Facturado del período"
+            value={formatCompactCurrency(latest.collections.issuedAmount)}
+            current={latest.collections.issuedAmount}
+            previous={previous?.collections.issuedAmount}
+            hint={`${formatNumber(latest.collections.issuedCount)} recibos emitidos`}
+          />
+          <KPICard
+            label="Cobrabilidad"
+            value={formatPercent(latest.collections.amountCollectionRate)}
+            current={latest.collections.amountCollectionRate}
+            previous={previous?.collections.amountCollectionRate}
+            hint="Cobrado sobre facturado"
+            icon="percent"
+          />
+          <KPICard
+            label="En mora"
+            value={formatCompactCurrency(latest.collections.overdueAmount)}
+            current={latest.collections.overdueAmount}
+            previous={previous?.collections.overdueAmount}
+            positiveWhenUp={false}
+            hint={`${formatNumber(latest.collections.overdueCount)} cuotas`}
+          />
+        </div>
+      )
+    }
+  </Section>
+
+  {
+    insights.length > 0 && (
+      <Section title="Insights del período">
+        <InsightList insights={insights} />
+      </Section>
+    )
+  }
+
+  <Section
+    title="Canales de pago"
+    eyebrow="Comparativa"
+    subtitle="Qué canal trae más volumen, cuál tiene mejor ticket, cuál cobra más rápido."
+  >
+    {
+      channels.length === 0 ? (
+        <EmptyState
+          title="Sin pagos clasificados por canal"
+          detail="El canal se deduce del cobrador del recibo y de la configuración de Red Link y Mercado Pago de cada club."
+        />
+      ) : (
+        <div class="grid gap-4 lg:grid-cols-2">
+          <Card title="Distribución por monto" description={`Período ${periodLabel}`}>
+            <ChannelDonut channels={channels} metric="amount" client:load />
+          </Card>
+          <Card
+            title="Distribución por transacciones"
+            description="Adopción real (no siempre la del monto)"
+          >
+            <ChannelDonut channels={channels} metric="count" client:load />
+          </Card>
+        </div>
+      )
+    }
+  </Section>
+
+  {
+    channels.length > 0 && (
+      <Section title="Detalle por canal">
+        <Card padding="sm">
+          <ChannelTable channels={channels} client:load />
+        </Card>
+
+        <div class="mt-4 grid gap-3 sm:grid-cols-3">
+          {bestChannel && (
+            <div class="rounded-lg border border-positive-500/30 bg-positive-50 p-3.5 text-sm text-positive-700">
+              <p class="text-[11px] font-semibold uppercase tracking-wide">Mayor monto</p>
+              <p class="mt-1 text-base font-bold">{paymentChannelLabels[bestChannel.channel]}</p>
+              <p class="text-xs opacity-80">{formatCompactCurrency(bestChannel.amount)}</p>
+            </div>
+          )}
+          {highestTicket && (
+            <div class="rounded-lg border border-navy-300/30 bg-navy-50 p-3.5 text-sm text-navy-900">
+              <p class="text-[11px] font-semibold uppercase tracking-wide">Ticket más alto</p>
+              <p class="mt-1 text-base font-bold">{paymentChannelLabels[highestTicket.channel]}</p>
+              <p class="text-xs opacity-80">
+                {formatCompactCurrency(highestTicket.avgTicket)} promedio
+              </p>
+            </div>
+          )}
+          {fastestChannel && (
+            <div class="rounded-lg border border-warning-500/30 bg-warning-50 p-3.5 text-sm text-warning-700">
+              <p class="text-[11px] font-semibold uppercase tracking-wide">Más rápido</p>
+              <p class="mt-1 text-base font-bold">{paymentChannelLabels[fastestChannel.channel]}</p>
+              <p class="text-xs opacity-80">{fastestChannel.avgDaysToCollect} días promedio</p>
+            </div>
+          )}
+        </div>
+      </Section>
+    )
+  }
+
+  <Section
+    title="Evolución mensual"
+    eyebrow="Tendencias"
+    subtitle="Detectá qué canales crecen y cuáles pierden participación."
+  >
+    <Card title="Monto cobrado por canal" description="Últimos 12 meses">
+      {
+        series.length > 0 ? (
+          <ChannelTrend series={series} metric="amount" client:load />
+        ) : (
+          <EmptyState title="Sin historial disponible" excluded={data.excluded} />
+        )
+      }
+    </Card>
+  </Section>
+
+  <Section title="Mora y cobrabilidad" eyebrow="Cobrabilidad">
+    <div class="grid gap-4 lg:grid-cols-2">
+      <Card title="Cobrabilidad del período" description={`Cobrado sobre facturado · ${periodLabel}`}>
+        {
+          latest === null || latest.collections.issuedAmount === 0 ? (
+            <EmptyState title="Sin facturación en el período" />
+          ) : (
+            <div class="flex flex-col items-center justify-center py-6">
+              <div class="text-5xl font-extrabold tabular text-navy-900">
+                {formatPercent(latest.collections.amountCollectionRate)}
+              </div>
+              <p class="mt-2 text-center text-sm text-ink-500">
+                {formatCompactCurrency(latest.collections.amount)} cobrados de{' '}
+                {formatCompactCurrency(latest.collections.issuedAmount)} facturados
+              </p>
+              <p class="mt-1 text-center text-xs text-ink-500">
+                {formatNumber(latest.collections.count)} recibos pagos de{' '}
+                {formatNumber(latest.collections.issuedCount)} emitidos
+              </p>
+            </div>
+          )
+        }
+      </Card>
+      <Card title="Edad de la deuda" description="Monto impago por antigüedad del vencimiento">
+        {
+          hasOverdue ? (
+            <OverdueAging buckets={overdueBuckets} client:load />
+          ) : (
+            <EmptyState title="Sin deuda impaga registrada" excluded={overdueExcluded} />
+          )
+        }
+      </Card>
+    </div>
+  </Section>
+</Layout>

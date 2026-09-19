@@ -1,0 +1,156 @@
+---
+import Layout from '@layouts/Layout.astro';
+import Section from '@components/Section.astro';
+import KPICard from '@components/KPICard.astro';
+import Card from '@components/Card.astro';
+import DataSourceBanner from '@components/DataSourceBanner.astro';
+import ChannelDonut from '@components/charts/ChannelDonut.tsx';
+import ChannelTrend from '@components/charts/ChannelTrend.tsx';
+import ChannelTable from '@components/charts/ChannelTable.tsx';
+import MembershipTrend from '@components/charts/MembershipTrend.tsx';
+
+import { clubSeries, clubs, getClub, latestMonth, loadDashboard, previousMonth } from '@db';
+import { paymentChannelLabels } from '@data/types';
+import {
+  formatCompactCurrency,
+  formatNumber,
+  formatPercent,
+  formatYearMonth,
+} from '@lib/format';
+
+export async function getStaticPaths() {
+  return clubs.map((c) => ({ params: { id: c.id } }));
+}
+
+const { id } = Astro.params;
+const club = getClub(id!);
+if (!club) {
+  return Astro.redirect('/clubes');
+}
+
+// Twelve months of real data for this club. If the club's DB could not be
+// read, it simply has no rows here and we send the reader back to the list.
+const data = await loadDashboard();
+const series = clubSeries(data, club.id);
+
+const latest = series.find((m) => m.yearMonth === latestMonth);
+const previous = series.find((m) => m.yearMonth === previousMonth);
+
+if (!latest) {
+  return Astro.redirect('/clubes');
+}
+
+const clubExcluded = data.excluded.filter((e) => e.id === club.id);
+
+const periodLabel = formatYearMonth(latestMonth, { withYear: true });
+const sortedChannels = [...latest.byChannel].sort((a, b) => b.amount - a.amount);
+const topChannel = sortedChannels[0];
+---
+
+<Layout title={club.name} subtitle={`${club.city} · Período: ${periodLabel}`}>
+  <div class="mb-6">
+    <a href="/clubes" class="text-xs font-semibold uppercase tracking-wide text-navy-700 hover:text-navy-900">
+      ← Volver a comparativa
+    </a>
+  </div>
+
+  <DataSourceBanner included={[club]} excluded={clubExcluded} />
+
+  <Section title="Indicadores del mes" eyebrow={club.shortName}>
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <KPICard
+        label="Socios activos"
+        value={formatNumber(latest.members.active)}
+        current={latest.members.active}
+        previous={previous?.members.active}
+        icon="users"
+      />
+      <KPICard
+        label="Cobrado del mes"
+        value={formatCompactCurrency(latest.collections.amount)}
+        current={latest.collections.amount}
+        previous={previous?.collections.amount}
+        icon="currency"
+      />
+      <KPICard
+        label="Tasa de cobranza"
+        value={formatPercent(latest.collections.collectionRate)}
+        current={latest.collections.collectionRate}
+        previous={previous?.collections.collectionRate}
+        icon="percent"
+      />
+      <KPICard
+        label="Ticket promedio"
+        value={formatCompactCurrency(latest.collections.avgTicket)}
+        current={latest.collections.avgTicket}
+        previous={previous?.collections.avgTicket}
+        icon="spark"
+      />
+    </div>
+  </Section>
+
+  {
+    topChannel && (
+      <Section title="Canal líder" eyebrow="Cobranza">
+        <Card>
+          <div class="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+                Canal que más recauda en {club.shortName}
+              </p>
+              <p class="mt-1 text-2xl font-extrabold text-ink-900">
+                {paymentChannelLabels[topChannel.channel]}
+              </p>
+              <p class="mt-1 text-sm text-ink-600">
+                {formatCompactCurrency(topChannel.amount)} ·{' '}
+                {latest.collections.amount > 0 &&
+                  formatPercent(topChannel.amount / latest.collections.amount)}{' '}
+                del total · {formatNumber(topChannel.count)} transacciones ·{' '}
+                {topChannel.avgDaysToCollect} días promedio
+              </p>
+            </div>
+          </div>
+        </Card>
+      </Section>
+    )
+  }
+
+  <Section title="Distribución por canal">
+    <div class="grid gap-4 lg:grid-cols-2">
+      <Card title="Por monto" description={`Período ${periodLabel}`}>
+        <ChannelDonut channels={latest.byChannel} metric="amount" client:load />
+      </Card>
+      <Card title="Por transacciones">
+        <ChannelDonut channels={latest.byChannel} metric="count" client:load />
+      </Card>
+    </div>
+    <div class="mt-4">
+      <Card padding="sm">
+        <ChannelTable channels={latest.byChannel} client:load />
+      </Card>
+    </div>
+  </Section>
+
+  <Section title="Evolución" eyebrow="12 meses">
+    <div class="grid gap-4 lg:grid-cols-2">
+      <Card title="Cobrado por canal">
+        <ChannelTrend series={series} metric="amount" client:load />
+      </Card>
+      <Card title="Altas, bajas y padrón">
+        <MembershipTrend series={series} client:load />
+      </Card>
+    </div>
+  </Section>
+
+  <div class="mt-2 rounded-lg border border-navy-100 bg-navy-50/40 p-4 text-sm text-ink-700">
+    <p>
+      ¿Querés el detalle de cobros recibidos vía <strong>Red Link</strong> para este club?
+      <a
+        href={`/red-link/${club.id}`}
+        class="ml-1 font-semibold text-navy-700 underline-offset-2 hover:underline"
+      >
+        Ver sección Red Link →
+      </a>
+    </p>
+  </div>
+</Layout>

@@ -16,7 +16,7 @@ Pensado para responder tres preguntas:
 2. **¿Cómo evoluciona el padrón de socios?** — Altas, bajas, retención, distribución por categoría, grupos familiares.
 3. **¿Qué tan bien se usan las canchas?** — Reservas, ocupación, hora pico, día más demandado, mix socios/invitados.
 
-Sobre **8 clubes** en simultáneo, con drill-down por club.
+Sobre los **7 clubes** que opera 4x, con drill-down por club.
 
 ---
 
@@ -190,7 +190,7 @@ Identificadores de código en **inglés**, contenido visible al usuario en **esp
 - **Patrones de uso**: distribución por día de la semana y por hora del día.
 - **Evolución mensual**: reservas y recaudación de los últimos 12 meses.
 
-Fuente real: `RentalPlaces` + `RentalPlacesAvailable` + `ShiftBooking` + `ShiftBookingDetail`. Cinco de los ocho clubes operan canchas; los otros se omiten naturalmente.
+Fuente real: `RentalPlaces` + `RentalPlacesAvailable` + `ShiftBooking` + `ShiftBookingDetail`. Los clubes que operan canchas aparecen en la sección; el resto se omite naturalmente; los otros se omiten naturalmente.
 
 ### Comparativa multi-club
 
@@ -252,7 +252,6 @@ Paleta navy/slate consistente con el sitio corporativo. Tipografía Inter idem. 
 
 ## Pendientes conocidos
 
-- **Connection string de CAI**: es el único club del catálogo sin configurar, y por eso aparece como excluido en todas las secciones.
 - **Usuario de sólo lectura**: hoy se usa el usuario de la cadena configurada. Antes de dejarlo corriendo seguido conviene un usuario dedicado con permisos de lectura.
 - **Pasar a SSR**: el dashboard hoy es estático. Para reflejar datos en vivo hay que cambiar `output: 'server'` o `'hybrid'` en `astro.config.mjs` y agregar un adapter (`@astrojs/node` para hosting propio, o el del proveedor cloud elegido).
 - **Filtros del Topbar** (Club y Período): selects sin lógica todavía. Decidir si recargan la página (server-side, requiere SSR) o si se vuelven reactivos del lado cliente.

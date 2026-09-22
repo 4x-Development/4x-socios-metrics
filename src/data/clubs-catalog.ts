@@ -70,7 +70,7 @@ export const clubsCatalog: ClubConfig[] = [
     id: 'naytuel',
     name: 'Club Naytuel',
     shortName: 'Naytuel',
-    city: 'Carmen de Patagones',
+    city: 'Dolores',
     envVar: 'DB_CONN_NAYTUEL',
     active: true,
   },
@@ -80,14 +80,6 @@ export const clubsCatalog: ClubConfig[] = [
     shortName: 'IFC Castelli',
     city: 'Castelli',
     envVar: 'DB_CONN_IFC_CASTELLI',
-    active: true,
-  },
-  {
-    id: 'cai',
-    name: 'Club Atlético Independiente',
-    shortName: 'CAI',
-    city: 'Avellaneda',
-    envVar: 'DB_CONN_CAI',
     active: true,
   },
 ];

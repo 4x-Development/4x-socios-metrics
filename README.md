@@ -148,6 +148,28 @@ Rediseno/
 
 ---
 
+## Acceso al dashboard
+
+El tablero muestra la recaudación de todos los clubes, así que no puede quedar accesible por URL. `middleware.ts` corre en el borde de Vercel antes de servir cualquier página y pide usuario y clave (HTTP Basic) en todas las rutas.
+
+Las credenciales viven en la variable de entorno `DASHBOARD_USERS`, una por persona:
+
+```bash
+DASHBOARD_USERS="leandro:una-clave-larga,miguel:otra-clave-larga"
+```
+
+Se carga en **Vercel → Settings → Environment Variables → Production** y se aplica al redeployar. Sumar o sacar a alguien es editar esa variable; no hay base de usuarios que mantener.
+
+**Falla cerrado**: si la variable falta o está mal escrita, el middleware rechaza todo. Un deploy mal configurado deja el tablero inaccesible, nunca público.
+
+Limitaciones que conviene tener presentes:
+
+- La clave es compartida por persona, pero no hay identidad real ni registro de quién entró. Para eso hace falta Vercel Authentication sobre un equipo Pro.
+- Basic Auth viaja protegido por HTTPS, pero el navegador la recuerda hasta cerrar la sesión: no conviene usarla en una computadora compartida del club.
+- El middleware también agrega `X-Robots-Tag: noindex, nofollow`, para que la URL no termine indexada si alguna vez se filtra.
+
+---
+
 ## Convención de naming
 
 Identificadores de código en **inglés**, contenido visible al usuario en **español (es-AR)**. Detalle en `../../../CLAUDE.md` § 6.
